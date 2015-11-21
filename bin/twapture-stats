@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+"""
+docs
+"""
+from __future__ import absolute_import, print_function
+import os
+import time
+import json
+
+from requests.packages import urllib3
+urllib3.disable_warnings()
+
+from tweepy import OAuthHandler
+from twapture import MultiplexListener, TwitterStreamStats
+
+# Go to http://apps.twitter.com and create an app.
+# The consumer key and secret will be generated for you after
+consumer_key=os.environ['TWITTER_CONSUMER_KEY']
+consumer_secret=os.environ['TWITTER_CONSUMER_SECRET']
+
+# After the step above, you will be redirected to your app's page.
+# Create an access token under the the "Your access token" section
+access_token=os.environ['TWITTER_ACCESS_TOKEN']
+access_token_secret=os.environ['TWITTER_ACCESS_TOKEN_SECRET']
+
+
+def main():
+    ts = TwitterStreamStats()
+
+    l = MultiplexListener(ts.classify)
+    auth = OAuthHandler(consumer_key, consumer_secret)
+    auth.set_access_token(access_token, access_token_secret)
+
+    stream = Stream(auth, l)
+    try:
+        stream.filter(locations=[-125.0,24.0, -66.0,50.0])
+    except KeyboardInterrupt: 
+        ts.report() 
+
+
+if __name__ == '__main__':
+    main()
+

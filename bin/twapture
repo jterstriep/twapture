@@ -1,0 +1,242 @@
+#!/usr/bin/env python
+from __future__ import absolute_import, print_function
+import os
+import sys
+import argparse
+import json
+
+import logging
+import logging.handlers
+logger = logging.getLogger('twapture')
+
+from requests.packages import urllib3
+urllib3.disable_warnings()
+
+from tweepy import OAuthHandler
+from tweepy import Stream
+
+from twapture import MultiplexListener, StatusEncoder
+from twapture.multiplex import pprint_tweets
+
+
+def split_units(interval):
+    "splits interval into numerical value and units"
+    for i,c in enumerate(interval):
+        if not c.isdigit():
+            break;
+    return (int(s[:i]), s[i:])
+
+
+def config_watched_logger(logger, fname, level=logging.INFO):
+    handler = logging.handlers.WatchedFileHandler(fname)
+    handler.setLevel(level)
+    formatter = logging.Formatter('%(asctime)-18s %(levelname)8s %(name)s '
+                                  ': %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(level)
+
+
+def config_stdout_recorder(logger, fname, 
+                            memsize=100*1024, level=logging.INFO):
+    """Creates a logger with an in-memory handler that feeds a watched
+       file handler.
+    """
+    handler = logging.handlers.WatchedFileHandler(fname)
+    formatter = logging.Formatter('%(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(level)
+
+
+def config_watched_recorder(logger, fname, 
+                            memsize=100*1024, level=logging.INFO):
+    """Creates a logger with an in-memory handler that feeds a watched
+       file handler.
+    """
+    handler = logging.handlers.WatchedFileHandler(fname)
+    memhandler = logging.handlers.MemoryHandler(100*1024, target=handler)
+    formatter = logging.Formatter('%(message)s')
+    memhandler.setFormatter(formatter)
+    logger.addHandler(memhandler)
+    logger.setLevel(logging.INFO)
+
+
+def config_timed_recorder(logger, fname, memsize=100*1024, 
+                          interval='midnight', backupCount=0):
+    """Creates a logger with an in-memory handler that acts as a buffer
+       for a timed rotator file handler.
+    """
+    if interval in ('midnight', 'W0', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6'):
+        handler = logging.handlers.TimedRotateFileHandler(fname, 
+                when=interval, backupCount=backupCount)
+    else:
+        value, units = split_units(interval)
+        handler = logging.handler.TimedRotateFileHandler(fname, 
+                when=unit, interval=value, backupCount=backupCount)
+
+    memhandler = logging.handlers.MemoryHandler(memsize, target=handler)
+    formatter = logging.Formatter('%(message)s')
+    memhandler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+
+def export_shell(args):
+    """writes the security values in a format useful for sourcing from shell"""
+
+    print("export TWITTER_CONSUMER_KEY=%s" % args.ck)
+    print("export TWITTER_CONSUMER_SECRET=%s" % args.cs)
+    print("export TWITTER_ACCESS_TOKEN=%s" % args.at)
+    print("export TWITTER_ACCESS_TOKEN_SECRET=%s" % args.ats)
+    sys.exit(0)
+
+def export_supervisord(args):
+    """writes the security values in a format useful for supervisord config"""
+
+    print('environment=TWITTER_CONSUMER_SECRET="%s"=TWITTER_CONSUMER_SECRET'
+          '="%s"=TWITTER_ACCESS_TOKEN="%s"=TWITTER_ACCESS_TOKEN_SECRET="%s"' \
+          % (args.ck, args.cs, args.at, args.ats))
+    sys.exit(0)
+
+
+def validate(args):
+    """check that necessary security keys are set
+    """
+
+    valid = True
+    if not args.ck:
+        logger.valid('consumer key not set, use --consumer-key option')
+        valid = False
+    if not args.cs:
+        logger.valid('consumer secret not set, use --consumer-secret option')
+        valid = False
+    if not args.at:
+        logger.valid('access token not set, use --access-token option')
+        valid = False
+    if not args.ats:
+        logger.valid('access token secret not set, use '
+                     '--access-token-secret option')
+        valid = False
+
+    return valid
+
+
+def create_parser():
+
+    parser = argparse.ArgumentParser(description=__doc__)
+
+    parser.add_argument('recorder', 
+           nargs='?', default='',
+           help='filename where tweets will be written (default=stdout)')
+
+    parser.add_argument('--locations',
+           default='',
+           help='bounding box (llx,lly,trx,try) to use as filter')
+
+    parser.add_argument('--keywords',
+           default='',
+           help='comma separated list of keywords to use as filter')
+
+    parser.add_argument('--log-stats',
+           default=False, action='store_true',
+           help='print collection statistics to log')
+
+    parser.add_argument('--ck', '--consumer-key',
+           default=os.environ.get('TWITTER_CONSUMER_KEY', ''),
+           help='Twitter consumer key (default=$TWITTER_CONSUMER_KEY)')
+
+    parser.add_argument('--cs', '--consumer-secret',
+           default=os.environ.get('TWITTER_CONSUMER_SECRET', ''),
+           help='Twitter consumer key (default=$TWITTER_CONSUMER_SECRET)')
+
+    parser.add_argument('--at', '--access-token',
+           default=os.environ.get('TWITTER_ACCESS_TOKEN', ''),
+           help='Twitter access token (default=$TWITTER_CONSUMER_KEY)')
+
+    parser.add_argument('--ats', '--access-token-secret',
+           default=os.environ.get('TWITTER_ACCESS_TOKEN_SECRET', ''),
+           help='Twitter access token secret')
+
+    parser.add_argument('--trf', '--timed-rotating-file', 
+           default='', metavar='INTERVAL',
+           help='rotate the recorder file at fixed interval (defaults '
+                'to watched file)')
+
+    parser.add_argument('--bs', '--buffer-size',
+           default=100*1024, metavar='KB', type=int,
+           help='buffer size in KB (default=100)')
+
+    parser.add_argument('--slf', '--system-log-file',
+           default='twapture.log',
+           help='the normal log file')
+
+    parser.add_argument('--export-shell', dest='export_shell',
+           default=False, action='store_true',
+           help='export security values in shell format and exit')
+
+    parser.add_argument('--export-supervisord', dest='export_supervisord',
+           default=False, action='store_true',
+           help='export security values in supervisord.conf format and exit')
+
+    return parser
+
+
+def main():
+
+    parser = create_parser()
+    args = parser.parse_args()
+
+    # setup the error logger (logger is a global variable)
+    config_watched_logger(logger, args.slf)
+
+    # ensure that logger is configured prior to calling validate
+    if not validate(args):
+        parser.print_usage()
+        sys.exit(1)
+
+    # dumps the security tokens in convenient formats
+    if args.export_shell:
+        export_shell(args)
+    if args.export_supervisord:
+        export_supervisord(args)
+
+    # create the twitter stream listener 
+    auth = OAuthHandler(args.ck, args.cs)
+    auth.set_access_token(args.at, args.ats)
+
+    # create the tweet recorder, set the handlers
+    if args.recorder:
+        recorder = logging.getLogger(u'tweet_recorder')
+        if args.trf:
+            config_timed_recorder(recorder, args.recorder, args.trf)
+        else:
+            config_watched_recorder(recorder, args.recorder)
+
+        # create the field encoder and writer
+        csv_encoder = StatusEncoder(recorder.info)
+        listener = MultiplexListener(csv_encoder.encode)
+
+    # if recorder file isn't specified, pretty print tweets to stdout
+    else:
+        listener = MultiplexListener(pprint_tweets)
+
+    # capture tweets
+    stream = Stream(auth, listener)
+    try:
+        if args.keywords and not args.locations:
+            stream.filter(keywords=args.keywords)
+        elif args.locations and not args.keywords:
+            stream.filter(locations=args.locations)
+        elif args.keywords and args.locations:
+            stream.filter(keyword=args.keywords, locations=args.locations)
+        else:
+            stream.sample()
+
+    except Exception as e:
+        logger.error('unable to establish connection', exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

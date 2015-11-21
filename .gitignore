@@ -1,9 +1,12 @@
+# commonly used transient files
+*.log
+*.csv
+
 # Compiled python modules.
 *.pyc
 
 # Setuptools distribution folder.
 /dist/
-
 /build/
 
 # Python egg metadata, regenerated from source files by setuptools.

@@ -60,11 +60,16 @@ class MultiplexListener(StreamListener):
 
     def on_error(self, status):
         if status == 420:
-            logger.warn('status=420: twitter streaming is being limited')
+            logger.warn('MultiplexListener: twitter stream is being limited')
             return True
 
-        # Twitter server errors
+        # twitter server errors
         elif status >= 500:
-            logger.error('status=%d: twitter server error (waiting 1 min)')
+            logger.error('MultiplexListener: twitter server error: code=%d',
+                         status)
             return True
 
+        else:
+            logger.error('MultiplexListener: stream returned error: code=%d',
+                         status)
+            return True

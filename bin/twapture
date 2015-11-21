@@ -94,7 +94,7 @@ def export_shell(args):
 def export_supervisord(args):
     """writes the security values in a format useful for supervisord config"""
 
-    print('environment=TWITTER_CONSUMER_SECRET="%s"=TWITTER_CONSUMER_SECRET'
+    print('environment=TWITTER_CONSUMER_KEY="%s"=TWITTER_CONSUMER_SECRET'
           '="%s"=TWITTER_ACCESS_TOKEN="%s"=TWITTER_ACCESS_TOKEN_SECRET="%s"' \
           % (args.ck, args.cs, args.at, args.ats))
     sys.exit(0)
@@ -106,16 +106,16 @@ def validate(args):
 
     valid = True
     if not args.ck:
-        logger.valid('consumer key not set, use --consumer-key option')
+        logger.error('consumer key not set, use --consumer-key option')
         valid = False
     if not args.cs:
-        logger.valid('consumer secret not set, use --consumer-secret option')
+        logger.error('consumer secret not set, use --consumer-secret option')
         valid = False
     if not args.at:
-        logger.valid('access token not set, use --access-token option')
+        logger.error('access token not set, use --access-token option')
         valid = False
     if not args.ats:
-        logger.valid('access token secret not set, use '
+        logger.error('access token secret not set, use '
                      '--access-token-secret option')
         valid = False
 

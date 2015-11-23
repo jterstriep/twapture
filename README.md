@@ -30,8 +30,8 @@ sudo python setup.py install
 ```
 
 ## To Do
-Write documentation
-Add stream statistics
-Add package to Pypi
+* Write documentation
+* Add stream statistics
+* Add package to Pypi
 
 

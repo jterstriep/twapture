@@ -44,7 +44,7 @@ def parse_interval(interval):
     for i,c in enumerate(interval):
         if not c.isdigit():
             break;
-    return (int(s[:i]), s[i:])
+    return (int(interval[:i]), interval[i:])
 
 
 def parse_locations(locations):
@@ -61,8 +61,7 @@ def config_watched_logger(logger, fname, level=logging.INFO):
     logger.setLevel(level)
 
 
-def config_watched_recorder(logger, fname, 
-                            bufsize=100, level=logging.INFO):
+def config_watched_recorder(logger, fname, bufsize=100, level=logging.INFO):
     """Creates a logger with an in-memory handler that feeds a watched
        file handler.
     """
@@ -76,18 +75,17 @@ def config_watched_recorder(logger, fname,
     logger.setLevel(logging.INFO)
 
 
-def config_timed_recorder(logger, fname, bufsize=100,
-                          interval='midnight', backupCount=0):
+def config_timed_recorder(logger, fname, interval, bufsize=100, backupCount=0):
     """Creates a logger with an in-memory handler that acts as a buffer
        for a timed rotator file handler.
     """
     if interval in ('midnight', 'W0', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6'):
-        handler = logging.handlers.TimedRotateFileHandler(fname, 
+        handler = logging.handlers.TimedRotatingFileHandler(fname, 
                 when=interval, backupCount=backupCount)
     else:
         value, units = parse_interval(interval)
-        handler = logging.handler.TimedRotateFileHandler(fname, 
-                when=unit, interval=value, backupCount=backupCount)
+        handler = logging.handlers.TimedRotatingFileHandler(fname, 
+                when=units, interval=value, backupCount=backupCount)
 
     memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
     formatter = logging.Formatter('%(message)s')

@@ -7,16 +7,16 @@
 Provides a flexible tool for capturing tweets from Twitter's streaming API.
 The stream can be filtered based on topics (keywords and phrases) and/or
 location (bounding box). If no filters are specified the entire public
-data stream is sampled.\n
+data stream is sampled.
 
 Twapture uses Python's logging tool to record incoming tweets. By default,
 a WatchedFileHandler is used so that an external process can manage file
 rotation, but a TimedRotatingFileHandling can be specified to allow
-twapture to self-manage its record files.\n
+twapture to self-manage its record files.
 
 Twapture can be used as a command line tool to explore the twitter stream,
 but it is primarily designed to work in concert with supervisord to provide
-a robust, continuously running capture service.\n
+a robust, continuously running capture service.
 """
 
 from __future__ import absolute_import, print_function
@@ -62,13 +62,13 @@ def config_watched_logger(logger, fname, level=logging.INFO):
 
 
 def config_watched_recorder(logger, fname, 
-                            memsize=10*1024, level=logging.INFO):
+                            bufsize=100, level=logging.INFO):
     """Creates a logger with an in-memory handler that feeds a watched
        file handler.
     """
     handler = logging.handlers.WatchedFileHandler(fname)
     handler.setLevel(logging.INFO)
-    memhandler = logging.handlers.MemoryHandler(memsize, target=handler)
+    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
     memhandler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')
     memhandler.setFormatter(formatter)
@@ -76,7 +76,7 @@ def config_watched_recorder(logger, fname,
     logger.setLevel(logging.INFO)
 
 
-def config_timed_recorder(logger, fname, memsize=10*1024, 
+def config_timed_recorder(logger, fname, bufsize=100,
                           interval='midnight', backupCount=0):
     """Creates a logger with an in-memory handler that acts as a buffer
        for a timed rotator file handler.
@@ -89,7 +89,7 @@ def config_timed_recorder(logger, fname, memsize=10*1024,
         handler = logging.handler.TimedRotateFileHandler(fname, 
                 when=unit, interval=value, backupCount=backupCount)
 
-    memhandler = logging.handlers.MemoryHandler(memsize, target=handler)
+    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
     formatter = logging.Formatter('%(message)s')
     memhandler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -179,9 +179,10 @@ def create_parser():
                 'single character d=day,h=hour, etc. If timed-rotating-file '
                 'is not specified, a watched file is used.')
 
+    
     parser.add_argument('--bs', '--buffer-size',
-           default=10*1024, metavar='KB', type=int,
-           help='buffer size in KB (default=10)')
+           default=100, metavar='RECORDS', type=int,
+           help='buffer size in RECORDS (default=100)')
 
     parser.add_argument('--slf', '--system-log-file',
            default='twapture.log',
@@ -226,9 +227,10 @@ def main():
         recorder = logging.getLogger(u'tweet_recorder')
         if args.trf:
             config_timed_recorder(recorder, args.recorder, args.trf,
-                    memsize=args.bs)
+                    bufsize=args.bs)
         else:
-            config_watched_recorder(recorder, args.recorder, memsize=args.bs)
+            config_watched_recorder(recorder, args.recorder, 
+                    bufsize=args.bs)
 
         # create the field encoder and writer
         csv_encoder = StatusEncoder(recorder.info)

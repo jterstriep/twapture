@@ -24,5 +24,14 @@ filter that collects statistics on the incoming stream.
 
 ## Installion
 
+```bash
+git clone https://github.com/jterstriep/twapture.git
 sudo python setup.py install
+```
+
+## To Do
+Write documentation
+Add stream statistics
+Add package to Pypi
+
 

@@ -1,0 +1,240 @@
+#!/usr/bin/env python
+# Description: flexibly capture twitter streams using python logging
+# Author: Jeff Terstriep <jterstriep@gmail.com>
+# Date: 11/19/2015
+# License:
+"""
+Provides a flexible tool for capturing tweets from Twitter's streaming API.
+The stream can be filtered based on topics (keywords and phrases) and/or
+location (bounding box). If no filters are specified the entire public
+data stream is sampled.
+
+Twapture uses Python's logging tool to record incoming tweets. By default,
+a WatchedFileHandler is used so that an external process can manage file
+rotation, but a TimedRotatingFileHandling can be specified to allow
+twapture to self-manage its record files.
+
+Twapture can be used as a command line tool to explore the twitter stream,
+but it is primarily designed to work in concert with supervisord to provide
+a robust, continuously running capture service.
+"""
+
+from __future__ import absolute_import, print_function
+import os
+import sys
+import argparse
+import json
+import yaml
+
+import logging
+import logging.handlers
+logger = logging.getLogger('twapture')
+
+from requests.packages import urllib3
+urllib3.disable_warnings()
+
+from tweepy import OAuthHandler
+from tweepy import Stream
+
+from twapture import MultiplexListener, RawEncoder, CSVEncoder, FlatEncoder
+
+
+def parse_interval(interval):
+    "splits interval into numerical value and units"
+    for i,c in enumerate(interval):
+        if not c.isdigit():
+            break;
+    return (int(interval[:i]), interval[i:])
+
+
+def parse_locations(locations):
+    return [float(x.strip('[()]')) for x in locations.split(',')]
+
+
+def config_logger(logger, fname, level=logging.INFO):
+
+    if fname == 'stderr':
+        handler = logging.StreamHandler(sys.stderr)
+    else:
+        handler = logging.handlers.WatchedFileHandler(fname)
+
+    handler.setLevel(level)
+    formatter = logging.Formatter('%(asctime)-18s %(levelname)8s %(name)s '
+                                  ': %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(level)
+
+
+def config_stdout_recorder(logger, level=logging.INFO):
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(message)s')
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+
+def config_watched_recorder(logger, fname, bufsize=100, level=logging.INFO):
+    """Creates a logger with an in-memory handler that feeds a watched
+       file handler.
+    """
+    handler = logging.handlers.WatchedFileHandler(fname)
+    handler.setLevel(logging.INFO)
+    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
+    memhandler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(message)s')
+    memhandler.setFormatter(formatter)
+    logger.addHandler(memhandler)
+    logger.setLevel(logging.INFO)
+
+
+def config_timed_recorder(logger, fname, interval, bufsize=100, backupCount=0):
+    """Creates a logger with an in-memory handler that acts as a buffer
+       for a timed rotator file handler.
+    """
+    if interval in ('midnight', 'W0', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6'):
+        handler = logging.handlers.TimedRotatingFileHandler(fname, 
+                when=interval, backupCount=backupCount)
+    else:
+        value, units = parse_interval(interval)
+        handler = logging.handlers.TimedRotatingFileHandler(fname, 
+                when=units, interval=value, backupCount=backupCount)
+
+    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
+    formatter = logging.Formatter('%(message)s')
+    memhandler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+
+def merge_args(config, args):
+    """Override select configuration variables with command line args."""
+
+    # override configuration with command line options
+    if args.recorder_filename:
+        config['recorder']['filename'] = args.recorder_filename
+    if args.locations:
+        config['twitter']['locations'] = args.locations
+    if args.targets:
+        config['twitter']['targets'] = args.targets 
+    if args.log_filename:
+        config['logging']['filename'] = args.log_filename
+    if args.log_statistics > 0:
+        config['logging']['statistics'] = args.log_statistics
+
+    # security keys will come from environmental variables if available
+    if 'TWITTER_CONSUMER_KEY' in os.environ:
+        config['twitter']['consumer-key'] = \
+                os.environ.get('TWITTER_CONSUMER_KEY')
+
+    if 'TWITTER_CONSUMER_SECRET' in os.environ:
+        config['twitter']['consumer-secret'] = \
+                os.environ.get('TWITTER_CONSUMER_SECRET')
+
+    if 'TWITTER_ACCESS_TOKEN' in os.environ:
+        config['twitter']['access-token'] = \
+                os.environ.get('TWITTER_ACCESS_TOKEN')
+
+    if 'TWITTER_ACCESS_TOKEN_SECRET' in os.environ:
+        config['twitter']['access-token-secret'] = \
+                os.environ.get('TWITTER_ACCESS_TOKEN_SECRET')
+
+
+def create_parser():
+
+    parser = argparse.ArgumentParser(description=__doc__)
+
+    parser.add_argument('config',
+            help='YAML config file (required)')
+
+    parser.add_argument('--recorder-filename', 
+            help='filename where tweets will be written')
+
+    parser.add_argument('--locations',
+            help='bounding box (llx,lly,trx,try) to use as filter')
+
+    parser.add_argument('--targets',
+            help='comma separated list of keywords to use as filter')
+
+    parser.add_argument('--log-filename',
+            help='location for log file (default=stderr)')
+
+    parser.add_argument('--log-statistics', '--stats',
+            type=int, metavar='MIN', default=0, 
+            help='add collection statistics to log ever N minutes (default=0)')
+
+    return parser
+
+
+def main():
+
+    parser = create_parser()
+    args = parser.parse_args()
+
+    try:
+        with open(args.config) as ymlfile:
+            config = yaml.safe_load(ymlfile)
+    except (OSError, IOError) as e:
+        logging.error('could not process config file')
+        parser.print_usage()
+        sys.exit(1)
+    else:
+        merge_args(config, args)
+
+    # setup the process logger
+    config_logger(logger, config['logging']['filename'])
+
+    # create the tweet recorder, set the handlers
+    fname = config['recorder']['filename']
+    rotation = config['recorder']['rotating']
+    bufsize = config['recorder']['buffer-size']
+
+    recorder = logging.getLogger(u'tweet_recorder')
+    if fname == 'stdout':
+        config_stdout_recorder(recorder)
+    elif rotation == 'none':
+        config_watched_recorder(recorder, fname, bufsize=bufsize)
+    else:
+        config_timed_recorder(recorder, fname, rotation, bufsize=bufsize)
+
+
+    # check the recorder format
+    fformat = config['recorder']['format']
+    fields = config['recorder']['fields']
+    if fformat == 'raw':
+        encoder = RawEncoder(recorder.info, fields)
+    elif fformat == 'csv':
+        encoder = CSVEncoder(recorder.info, fields)
+    elif fformat == 'flat':
+        encoder = FlatEncoder(recorder.info, fields)
+    else:
+        raise RuntimeError('unknown recorder format = %s' % fformat)
+
+    listener = MultiplexListener(encoder.encode)
+
+    # capture tweets
+    track = config['recorder']['track']
+    locations = config['recorder']['locations']
+
+    auth = OAuthHandler(config['twitter']['consumer-key'],
+            config['twitter']['consumer-secret'])
+    auth.set_access_token(config['twitter']['access-token'],
+            config['twitter']['access-token-secret'])
+    stream = Stream(auth, listener)
+    try:
+        if track or locations:
+            logger.info('starting stream filter')
+            stream.filter(target=track.split(','),
+                    locations=parse_locations(locations))
+
+        else: 
+            logger.info('starting stream sample')
+            stream.sample()
+
+    except Exception as e:
+        logger.error('unable to establish connection', exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

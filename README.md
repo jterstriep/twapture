@@ -24,5 +24,11 @@ filter that collects statistics on the incoming stream.
 
 ## Installion
 
-sudo python setup.py install
+python setup.py install
+
+## Resources
+
+https://dev.twitter.com/overview/api
+http://www.tweepy.org/
+http://objectpath.org/reference.html
 

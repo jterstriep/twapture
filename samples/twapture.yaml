@@ -1,0 +1,48 @@
+# Twapture Configuration File
+
+# Twitter API values -- these can be overridden from the command line or
+# from environmental variables.
+twitter:
+    consumer-key: oZ8qX6UlyOSb13BA9u7mT0u1F
+    consumer-secret: DCmhGjFjd80hlTFZJwlPEFZeM0zaFHLTbwbQtVzyjQREHA4tqN
+    access-token: 14328204-kmjxXn9fNd1sKDLtTMWxecEVL1tNvd72zxAhx9zo2
+    access-token-secret: STPNyHdPQGmiwPolD6aeJCegMAJLfhPhRp5JaYp6vbZGt
+
+
+# Tweet recording options -- these values control where and how tweets
+# will be written. The tweet recorder is built using a WatchedFileHandler
+# (rotating=none) or a RotatingFileHandler.
+recorder:
+    track: []                    # track keywords and topics
+    locations: []                # bounding box
+    format: csv                  # raw (json) | csv | flat
+    filename: /tmp/twapture.csv  # path | stdout
+    rotating: midnight           # none, midnight, 3h (every 3 hours), etc
+    quoting: minimal             # all, minimal, nonnumeric, none
+    buffer-size: 100             # number of tweets collected before disk write
+
+    # format is '- fieldname = objectpath'
+    # - fieldnames are ignored in the CSV format
+    # - basic transformation in the objectpath are supported
+    fields:
+        - text          = $.text
+        - username      = $.user.name
+        - user_id       = $.user.id
+        - xcoord        = $.coordinates.coordinates[1]
+        - ycoord        = $.coordinates.coordinates[0]
+        - created_at    = $.created_at
+
+    # - reverse($.coordinates.coordinates) <<< COOL this works
+
+    # filter tweets based on content
+    # Note: this doesn't impact the streaming rate
+    filter: []
+
+
+# Logging options -- controls where the log will be generated and if
+# statistics will be entered into the log. Uses Python's WatchedFileHandler
+# if a path is given.
+logging:
+    filename: /tmp/newtwapture.log   # path | stderr
+    statistics: 0                     # add collection statistics
+

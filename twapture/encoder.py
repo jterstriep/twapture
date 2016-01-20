@@ -1,75 +1,85 @@
-import os
-import sys
 import json
+import io
+import unicodecsv as csv
+import objectpath as op
 
-import logging
-logger = logging.getLogger(__name__+'.encoder')
 
+class RawEncoder(object):
 
-class StatusEncoder:
-
-    def __init__(self, recorder, delimiter=','):
+    def __init__(self, recorder, fields):
         self.recorder = recorder
-        self.delimiter = delimiter
-
-    def get_longitude(self, status, default='0.0'):
-        c = status.get('coordinates', {})
-        if not c:
-            return default
-        else:
-            return str(c.get('coordinates')[0])
-    
-    def get_latitude(self, status, default='0.0'):
-        c = status.get('coordinates', {})
-        if not c:
-            return default
-        else:
-            return str(c.get('coordinates')[1])
-
-    def get_latlong(self, status, default=['0.0', '0.0']):
-        """ return coordinate list in lat, long order
-            Note: most tweets don't have coords set
-        """
-        c = status.get('coordinates', {})
-        if c:
-            return [str(c.get('coordinates')[1]), str(c.get('coordinates')[0])]
-        else:
-            return default
-
-    def is_retweet(self, status):
-        return str('retweeted_status' in status).lower()
-
 
     def encode(self, status):
-        """encodes the results into a string for writing to recorder"""
+        """Encodes the status to JSON string and records it."""
+
+        self.recorder(json.dumps(status))
+
+
+class FlatEncoder(object):
+
+    def __init__(self, recorder, fields):
+        self.recorder = recorder
+        self.fields = self.parse_fields(fields)
+
+    def parse_fields(self, fields):
+        """Convert field list into list of key, objectpath selection tuples."""
+        tuplelist = []
+        for f in fields:
+            k,v = f.split('=', 1)
+            tuplelist.append((k.strip(), v.strip()))
+
+        return tuplelist
+
+    def encode(self, status):
+        """Encodes the desired fields into flat JSON dict and records it."""
+
+        if 'text' not in status:
+            return True
+        tree = op.Tree(status)
+        d = {k: tree.execute(f) for k,f in self.fields}
+        self.recorder(json.dumps(d))
+
+
+class CSVEncoder(object):
+    """ 
+    The BytesIO (like StringIO) is used to capture the CSV writer output
+    line-by-line prior to be recorded.
+    """
+
+    def __init__(self, recorder, fields, 
+                 delimiter=',', quoting=csv.QUOTE_NONNUMERIC):
+        self.recorder = recorder
+        self.fields = self.parse_fields(fields)
+        self.line = io.BytesIO()
+        self.writer = csv.writer(self.line, 
+                delimiter=delimiter, quoting=quoting)
+
+    def parse_fields(self, fields):
+        """Convert field list into objectpath selection list."""
+        return [ f.split('=', 1)[1].strip() for f in fields ]
+
+    def encode(self, status):
+        """Encodes the desired fields into CSV and records it."""
     
         # skip deletes and limits
         if 'text' not in status:
             return True
 
-        user = status.get('user', {})
-        place = status.get('place', {})
-        if place == None:
-            place = {}
-        ostatus = status.get('retweeted_status', {})
-        if ostatus == None:
-            ostatus = {}
+        # convert the status (dict) into a objectpath
+        tree = op.Tree(status)
 
-        fields = [
-            status.get('text', ''),
-            status.get('id_str', ''),
-            status.get('created_at', ''),
-            status.get('source', ''),
-            self.is_retweet(status),
-            self.get_latitude(status),
-            self.get_longitude(status),
-            user.get('id_str', ''),
-            user.get('name', ''),
-            place.get('id', ''),
-            place.get('name', ''),
-            place.get('place_type', '')
-            ]
-        
-        self.recorder(self.delimiter.join(fields))
+        # extract the desired fields from the status
+        row = [tree.execute(f) for f in self.fields]
+
+        # write the row in CSV format into a buffer
+        self.writer.writerow(row)
+
+        # write the resulting string to the recorder
+        self.recorder(self.line.getvalue().strip())
+
+        # reset line buffer
+        self.line.truncate(0)
+        self.line.seek(0)
+
         return True
 

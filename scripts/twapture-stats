@@ -11,6 +11,7 @@ from requests.packages import urllib3
 urllib3.disable_warnings()
 
 from tweepy import OAuthHandler
+from tweepy import Stream
 from twapture import MultiplexListener, TwitterStreamStats
 
 # Go to http://apps.twitter.com and create an app.
@@ -25,17 +26,19 @@ access_token_secret=os.environ['TWITTER_ACCESS_TOKEN_SECRET']
 
 
 def main():
-    ts = TwitterStreamStats()
 
-    l = MultiplexListener(ts.classify)
+    # add the stat classifier to the callback list
+    stats = TwitterStreamStats()
+    listener = MultiplexListener(stats.classify)
+
     auth = OAuthHandler(consumer_key, consumer_secret)
     auth.set_access_token(access_token, access_token_secret)
+    stream = Stream(auth, listener)
 
-    stream = Stream(auth, l)
     try:
         stream.filter(locations=[-125.0,24.0, -66.0,50.0])
     except KeyboardInterrupt: 
-        ts.report() 
+        stats.report() 
 
 
 if __name__ == '__main__':

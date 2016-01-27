@@ -3,11 +3,10 @@
 # Twitter API values -- these can be overridden from the command line or
 # from environmental variables.
 twitter:
-    consumer-key: oZ8qX6UlyOSb13BA9u7mT0u1F
-    consumer-secret: DCmhGjFjd80hlTFZJwlPEFZeM0zaFHLTbwbQtVzyjQREHA4tqN
-    access-token: 14328204-kmjxXn9fNd1sKDLtTMWxecEVL1tNvd72zxAhx9zo2
-    access-token-secret: STPNyHdPQGmiwPolD6aeJCegMAJLfhPhRp5JaYp6vbZGt
-
+    consumer-key: *
+    consumer-secret: *
+    access-token: *
+    access-token-secret: *
 
 # Tweet recording options -- these values control where and how tweets
 # will be written. The tweet recorder is built using a WatchedFileHandler
@@ -16,6 +15,7 @@ recorder:
     track: []                    # track keywords and topics
     locations: []                # bounding box
     format: csv                  # raw (json) | csv | flat
+    delimiter: ","               # if int assume ascii character
     filename: /tmp/twapture.csv  # path | stdout
     rotating: midnight           # none, midnight, 3h (every 3 hours), etc
     quoting: minimal             # all, minimal, nonnumeric, none

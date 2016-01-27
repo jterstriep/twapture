@@ -3,6 +3,8 @@ import io
 import unicodecsv as csv
 import objectpath as op
 
+import logging
+logger = logging.getLogger(__name__)
 
 class RawEncoder(object):
 
@@ -46,17 +48,31 @@ class CSVEncoder(object):
     line-by-line prior to be recorded.
     """
 
-    def __init__(self, recorder, fields, 
-                 delimiter=',', quoting=csv.QUOTE_NONNUMERIC):
+    def __init__(self, recorder, fields, delimiter=',', quoting='nonnumeric'):
         self.recorder = recorder
         self.fields = self.parse_fields(fields)
         self.line = io.BytesIO()
+        if isinstance(delimiter, int):
+            delimiter = chr(delimiter)
         self.writer = csv.writer(self.line, 
-                delimiter=delimiter, quoting=quoting)
+                delimiter=delimiter, quoting=self._quote_(quoting))
+
+    def _quote_(self, qstring):
+        qtypes = dict(
+            none=csv.QUOTE_NONE,
+            minimal=csv.QUOTE_MINIMAL,
+            nonnumeric=csv.QUOTE_NONNUMERIC,
+            all=csv.QUOTE_ALL
+            )
+        if qstring not in qtypes:
+            logger.warn('unknown csv quoting type %s', qstring)
+        return qtypes.get(qstring, csv.QUOTE_NONNUMERIC)
+
 
     def parse_fields(self, fields):
         """Convert field list into objectpath selection list."""
         return [ f.split('=', 1)[1].strip() for f in fields ]
+
 
     def encode(self, status):
         """Encodes the desired fields into CSV and records it."""
@@ -70,6 +86,12 @@ class CSVEncoder(object):
 
         # extract the desired fields from the status
         row = [tree.execute(f) for f in self.fields]
+
+        # remove new lines from strings
+        # TODO: should this be an option?
+        for i,v in enumerate(row):
+            if isinstance(v, basestring):
+                row[i] = v.replace('\n', ' ')
 
         # write the row in CSV format into a buffer
         self.writer.writerow(row)

@@ -204,7 +204,10 @@ def main():
     if fformat == 'raw':
         encoder = RawEncoder(recorder.info, fields)
     elif fformat == 'csv':
-        encoder = CSVEncoder(recorder.info, fields)
+        delimiter = config['recorder'].get('delimiter', ',')
+        quoting = config['recorder'].get('quoting', 'minimal')
+        encoder = CSVEncoder(recorder.info, fields, 
+                delimiter=delimiter, quoting=quoting)
     elif fformat == 'flat':
         encoder = FlatEncoder(recorder.info, fields)
     else:

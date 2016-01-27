@@ -14,8 +14,17 @@ setup(name = 'twapture',
     packages = ['twapture'],
     install_requires = [
         'tweepy',
+        'pytz',
+        'PyYAML',
+        'objectpath',
+        'unicodecsv',
+        'elasticsearch',
     ],
-    scripts = ['bin/twapture'],
+    scripts = [
+        'scripts/twapture',
+        'scripts/twapture-stats',
+        'scripts/twapturectl',
+    ],
     include_package_data=True,
     zip_safe = False,
     )

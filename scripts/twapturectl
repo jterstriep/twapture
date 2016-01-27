@@ -24,6 +24,7 @@ import os
 import sys
 import argparse
 import json
+import yaml
 
 import logging
 import logging.handlers
@@ -60,40 +61,6 @@ def config_watched_logger(logger, fname, level=logging.INFO):
     logger.addHandler(handler)
     logger.setLevel(level)
 
-
-def config_watched_recorder(logger, fname, bufsize=100, level=logging.INFO):
-    """Creates a logger with an in-memory handler that feeds a watched
-       file handler.
-    """
-    handler = logging.handlers.WatchedFileHandler(fname)
-    handler.setLevel(logging.INFO)
-    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
-    memhandler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-    memhandler.setFormatter(formatter)
-    logger.addHandler(memhandler)
-    logger.setLevel(logging.INFO)
-
-
-def config_timed_recorder(logger, fname, interval, bufsize=100, backupCount=0):
-    """Creates a logger with an in-memory handler that acts as a buffer
-       for a timed rotator file handler.
-    """
-    if interval in ('midnight', 'W0', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6'):
-        handler = logging.handlers.TimedRotatingFileHandler(fname, 
-                when=interval, backupCount=backupCount)
-    else:
-        value, units = parse_interval(interval)
-        handler = logging.handlers.TimedRotatingFileHandler(fname, 
-                when=units, interval=value, backupCount=backupCount)
-
-    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
-    formatter = logging.Formatter('%(message)s')
-    memhandler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-
 def export_shell(args):
     """writes the security values in a format useful for sourcing from shell"""
 
@@ -103,6 +70,7 @@ def export_shell(args):
     print("export TWITTER_ACCESS_TOKEN_SECRET=%s" % args.ats)
     sys.exit(0)
 
+# TODO: write the entire config file
 def export_supervisord(args):
     """writes the security values in a format useful for supervisord config"""
 
@@ -111,88 +79,90 @@ def export_supervisord(args):
           % (args.ck, args.cs, args.at, args.ats))
     sys.exit(0)
 
+def export_config(args):
+    # get resource and write out
 
-def validate(args):
-    """check that necessary security keys are set
-    """
 
-    valid = True
-    if not args.ck:
-        logger.error('consumer key not set, use --consumer-key option')
-        valid = False
-    if not args.cs:
-        logger.error('consumer secret not set, use --consumer-secret option')
-        valid = False
-    if not args.at:
-        logger.error('access token not set, use --access-token option')
-        valid = False
-    if not args.ats:
-        logger.error('access token secret not set, use '
-                     '--access-token-secret option')
-        valid = False
+def merge_args(config, args):
+    """Override select configuration variables with command line args."""
 
-    return valid
+    if args.recorder_filename:
+        config['recorder']['filename'] = args.recorder_filename
+    if args.locations:
+        config['twitter']['locations'] = args.locations
+    if args.targets:
+        config['twitter']['targets'] = args.targets 
+    if args.log_filename:
+        config['logging']['filename'] = args.log_filename
+    if args.log_statistics > 0:
+        config['logging']['statistics'] = args.log_statistics
+    if args.targets:
+        config['twitter']['targets'] = args.targets 
+    if args.consumer_key:
+        config['twitter']['consumer_key'] = args.consumer_key
+    if args.consumer_secret:
+        config['twitter']['consumer_secret'] = args.consumer_secret
+    if args.access_token:
+        config['twitter']['access_token'] = args.access_token
+    if args.access_token_secret:
+        config['twitter']['access_token_secret'] = args.access_token_secret
 
 
 def create_parser():
 
     parser = argparse.ArgumentParser(description=__doc__)
 
-    parser.add_argument('recorder', 
-           nargs='?', default='',
-           help='filename where tweets will be written (default=stdout)')
+    parser.add_argument('config',
+            default = '',
+            help='YAML config file (required)')
+
+    parser.add_argument('--recorder-filename', 
+            default='',
+            help='filename where tweets will be written (default=stdout)')
 
     parser.add_argument('--locations',
-           default='',
-           help='bounding box (llx,lly,trx,try) to use as filter')
+            default='',
+            help='bounding box (llx,lly,trx,try) to use as filter')
 
-    parser.add_argument('--keywords',
-           default='',
-           help='comma separated list of keywords to use as filter')
+    parser.add_argument('--targets',
+            default='',
+            help='comma separated list of keywords to use as filter')
 
-    parser.add_argument('--log-stats',
-           default=False, action='store_true',
-           help='print collection statistics to log')
+    parser.add_argument('--log-filename',
+            default = 'stderr',
+            help='location for log file')
 
-    parser.add_argument('--ck', '--consumer-key',
-           default=os.environ.get('TWITTER_CONSUMER_KEY', ''),
-           help='Twitter consumer key (default=$TWITTER_CONSUMER_KEY)')
+    parser.add_argument('--log-statistics',
+            type=int, metavar='MIN', default=0, 
+            help='add collection statistics to log ever N minutes (default=0)')
 
-    parser.add_argument('--cs', '--consumer-secret',
-           default=os.environ.get('TWITTER_CONSUMER_SECRET', ''),
-           help='Twitter consumer key (default=$TWITTER_CONSUMER_SECRET)')
+    parser.add_argument('--consumer-key', '--ck',
+            default=os.environ.get('TWITTER_CONSUMER_KEY', ''),
+            help='Twitter consumer key (default=$TWITTER_CONSUMER_KEY)')
 
-    parser.add_argument('--at', '--access-token',
-           default=os.environ.get('TWITTER_ACCESS_TOKEN', ''),
-           help='Twitter access token (default=$TWITTER_CONSUMER_KEY)')
+    parser.add_argument('--consumer-secret', '--cs',
+            default=os.environ.get('TWITTER_CONSUMER_SECRET', ''),
+            help='Twitter consumer key (default=$TWITTER_CONSUMER_SECRET)')
 
-    parser.add_argument('--ats', '--access-token-secret',
-           default=os.environ.get('TWITTER_ACCESS_TOKEN_SECRET', ''),
-           help='Twitter access token secret')
+    parser.add_argument('--access-token', '--at',
+            default=os.environ.get('TWITTER_ACCESS_TOKEN', ''),
+            help='Twitter access token (default=$TWITTER_CONSUMER_KEY)')
 
-    parser.add_argument('--trf', '--timed-rotating-file', 
-           default='', metavar='INTERVAL',
-           help='rotate the recorder file at fixed interval. Example: '
-                'midnight or Nunit where N is interval and unit is '
-                'single character d=day,h=hour, etc. If timed-rotating-file '
-                'is not specified, a watched file is used.')
+    parser.add_argument('--access-token-secret', '--ats',
+            default=os.environ.get('TWITTER_ACCESS_TOKEN_SECRET', ''),
+            help='Twitter access token secret')
 
-    
-    parser.add_argument('--bs', '--buffer-size',
-           default=100, metavar='RECORDS', type=int,
-           help='buffer size in RECORDS (default=100)')
+    parser.add_argument('--export-config', 
+            default=False, action='store_true',
+            help='export a sample config file and exit')
 
-    parser.add_argument('--slf', '--system-log-file',
-           default='twapture.log',
-           help='the normal log file')
+    parser.add_argument('--export-supervisord',
+            default=False, action='store_true',
+            help='export security values in supervisord.conf format and exit')
 
-    parser.add_argument('--export-shell', dest='export_shell',
-           default=False, action='store_true',
-           help='export security values in shell format and exit')
-
-    parser.add_argument('--export-supervisord', dest='export_supervisord',
-           default=False, action='store_true',
-           help='export security values in supervisord.conf format and exit')
+    parser.add_argument('--export-shell', 
+            default=False, action='store_true',
+            help='export security values in shell format and exit')
 
     return parser
 
@@ -202,13 +172,16 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-    # setup the error logger (logger is a global variable)
-    config_watched_logger(logger, args.slf)
-
-    # ensure that logger is configured prior to calling validate
-    if not validate(args):
+    try:
+        with open(args.config) as ymlfile:
+            config = yaml.safe_load(ymlfile)
+    except (OSError, IOError) as e:
+        logging.error('could not process config file')
         parser.print_usage()
         sys.exit(1)
+
+    # setup the process logger
+    config_logger(logger, config['logging']['filename'])
 
     # dumps the security tokens in convenient formats
     if args.export_shell:
@@ -231,7 +204,7 @@ def main():
                     bufsize=args.bs)
 
         # create the field encoder and writer
-        csv_encoder = StatusEncoder(recorder.info)
+        csv_encoder = StatusEncoder(recorder.info, config.fields)
         listener = MultiplexListener(csv_encoder.encode)
 
     # if recorder file isn't specified, pretty print tweets to stdout

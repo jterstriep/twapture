@@ -34,4 +34,9 @@ sudo python setup.py install
 * Add stream statistics
 * Add package to Pypi
 
+## Resources
+
+https://dev.twitter.com/overview/api
+http://www.tweepy.org/
+http://objectpath.org/reference.html
 

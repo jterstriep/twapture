@@ -226,9 +226,9 @@ def main():
     stream = Stream(auth, listener)
     try:
         if track or locations:
-            logger.info('starting stream filter')
-            stream.filter(target=track.split(','),
-                    locations=parse_locations(locations))
+            logger.debug('starting stream filter: track=%s location=%s', 
+                    track, str(locations))
+            stream.filter(track=track, locations=locations)
 
         else: 
             logger.info('starting stream sample')

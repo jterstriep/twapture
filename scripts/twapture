@@ -36,15 +36,8 @@ urllib3.disable_warnings()
 from tweepy import OAuthHandler
 from tweepy import Stream
 
-from twapture import MultiplexListener, RawEncoder, CSVEncoder, FlatEncoder
+from twapture import SerializedListener, Encoder, Recorder
 
-
-def parse_interval(interval):
-    "splits interval into numerical value and units"
-    for i,c in enumerate(interval):
-        if not c.isdigit():
-            break;
-    return (int(interval[:i]), interval[i:])
 
 
 def parse_locations(locations):
@@ -66,47 +59,6 @@ def config_logger(logger, fname, level=logging.INFO):
     logger.setLevel(level)
 
 
-def config_stdout_recorder(logger, level=logging.INFO):
-    handler = logging.StreamHandler(stream)
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-
-def config_watched_recorder(logger, fname, bufsize=100, level=logging.INFO):
-    """Creates a logger with an in-memory handler that feeds a watched
-       file handler.
-    """
-    handler = logging.handlers.WatchedFileHandler(fname)
-    handler.setLevel(logging.INFO)
-    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
-    memhandler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-    memhandler.setFormatter(formatter)
-    logger.addHandler(memhandler)
-    logger.setLevel(logging.INFO)
-
-
-def config_timed_recorder(logger, fname, interval, bufsize=100, backupCount=0):
-    """Creates a logger with an in-memory handler that acts as a buffer
-       for a timed rotator file handler.
-    """
-    if interval in ('midnight', 'W0', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6'):
-        handler = logging.handlers.TimedRotatingFileHandler(fname, 
-                when=interval, backupCount=backupCount)
-    else:
-        value, units = parse_interval(interval)
-        handler = logging.handlers.TimedRotatingFileHandler(fname, 
-                when=units, interval=value, backupCount=backupCount)
-
-    memhandler = logging.handlers.MemoryHandler(bufsize, target=handler)
-    formatter = logging.Formatter('%(message)s')
-    memhandler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-
 def merge_args(config, args):
     """Override select configuration variables with command line args."""
 
@@ -115,12 +67,10 @@ def merge_args(config, args):
         config['recorder']['filename'] = args.recorder_filename
     if args.locations:
         config['twitter']['locations'] = args.locations
-    if args.targets:
-        config['twitter']['targets'] = args.targets 
+    if args.track:
+        config['twitter']['track'] = args.track 
     if args.log_filename:
         config['logging']['filename'] = args.log_filename
-    if args.log_statistics > 0:
-        config['logging']['statistics'] = args.log_statistics
 
     # security keys will come from environmental variables if available
     if 'TWITTER_CONSUMER_KEY' in os.environ:
@@ -153,15 +103,11 @@ def create_parser():
     parser.add_argument('--locations',
             help='bounding box (llx,lly,trx,try) to use as filter')
 
-    parser.add_argument('--targets',
+    parser.add_argument('--track',
             help='comma separated list of keywords to use as filter')
 
     parser.add_argument('--log-filename',
             help='location for log file (default=stderr)')
-
-    parser.add_argument('--log-statistics', '--stats',
-            type=int, metavar='MIN', default=0, 
-            help='add collection statistics to log ever N minutes (default=0)')
 
     return parser
 
@@ -197,36 +143,30 @@ def main():
     else:
         config_timed_recorder(recorder, fname, rotation, bufsize=bufsize)
 
+    listener = SerializedListener()
 
-    # check the recorder format
-    fformat = config['recorder']['format']
-    fields = config['recorder']['fields']
-    if fformat == 'raw':
-        encoder = RawEncoder(recorder.info, fields)
-    elif fformat == 'csv':
-        delimiter = config['recorder'].get('delimiter', ',')
-        quoting = config['recorder'].get('quoting', 'minimal')
-        encoder = CSVEncoder(recorder.info, fields, 
-                delimiter=delimiter, quoting=quoting)
-    elif fformat == 'flat':
-        encoder = FlatEncoder(recorder.info, fields)
-    else:
-        raise RuntimeError('unknown recorder format = %s' % fformat)
+    # configure statistic processing
+    if config['stats']['enable']:
+        stats = Statistics(config['stats'])
+        listener.append(stats.status_handler)
 
-    listener = MultiplexListener(encoder.encode)
+    # setup the recorder and add it to the stream listener
+    encoder = Encoder(config['encoder'])
+    recorder = Recorder(config['recorder'], encoder.status_handler)
+    listener.append(recorder.status_handler)
 
-    # capture tweets
-    track = config['recorder']['track']
-    locations = config['recorder']['locations']
-
+    # begin streaming
     auth = OAuthHandler(config['twitter']['consumer-key'],
             config['twitter']['consumer-secret'])
     auth.set_access_token(config['twitter']['access-token'],
             config['twitter']['access-token-secret'])
     stream = Stream(auth, listener)
+
+    track = config['twitter']['track']
+    locations = config['twitter']['locations']
     try:
         if track or locations:
-            logger.debug('starting stream filter: track=%s location=%s', 
+            logger.info('starting stream filter: track=%s location=%s', 
                     track, str(locations))
             stream.filter(track=track, locations=locations)
 

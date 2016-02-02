@@ -3,10 +3,10 @@
 # Twitter API values -- these can be overridden from the command line or
 # from environmental variables.
 twitter:
-    consumer-key: *
-    consumer-secret: *
-    access-token: *
-    access-token-secret: *
+    consumer-key: 
+    consumer-secret: 
+    access-token: 
+    access-token-secret: 
 
 # Tweet recording options -- these values control where and how tweets
 # will be written. The tweet recorder is built using a WatchedFileHandler
@@ -28,8 +28,8 @@ recorder:
         - text          = $.text
         - username      = $.user.name
         - user_id       = $.user.id
-        - xcoord        = $.coordinates.coordinates[1]
-        - ycoord        = $.coordinates.coordinates[0]
+        - xcoord        = $.coordinates and $.coordinates.coordinates[1]
+        - ycoord        = $.coordinates and $.coordinates.coordinates[0]
         - created_at    = $.created_at
 
     # - reverse($.coordinates.coordinates) <<< COOL this works
@@ -42,7 +42,28 @@ recorder:
 # Logging options -- controls where the log will be generated and if
 # statistics will be entered into the log. Uses Python's WatchedFileHandler
 # if a path is given.
+#
 logging:
-    filename: /tmp/newtwapture.log   # path | stderr
-    statistics: 0                     # add collection statistics
+    filename:    # path | stderr
+
+
+# Report tweet collection statistics
+# enable: true | false
+# interval: reporting rate 30m (every 30 minutes), 1d (once a day), etc
+# mode: csv | elasticsearch
+#
+stats:
+    enable: true
+    interval: 1h
+    mode: elasticsearch
+    csv:
+        path: twapture_stats.csv
+    json:
+        path: twapture_stats.json
+    elasticsearch:
+        host: 141.142.168.47
+        port: 80
+        prefix: es
+        auth: 
+        index: twapture-national
 

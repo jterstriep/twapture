@@ -1,6 +1,7 @@
 # commonly used transient files
 *.log
 *.csv
+*.swp
 
 # Compiled python modules.
 *.pyc

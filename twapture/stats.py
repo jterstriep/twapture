@@ -2,98 +2,88 @@
 """
 docs
 """
-from __future__ import absolute_import, print_function
 import os
+from datetime import timedelta
 import time
 import json
 
-import logging
-logger = logging.getLogger(__name__)
+
+def calc_interval(timestr):
+    """ Given a *timestr* (string) such as '5d', returns a timedelta object
+    representing the given value (e.g. timedelta(days=5)).
+    """
+
+    num = int(strip(timestr[:-1]))
+    if timestr[-1] == 's':
+        return timedelta(seconds=num)
+    elif timestr[-1] == 'm':
+        return timedelta(minutes=num)
+    elif timestr[-1] == 'h':
+        return timedelta(hours=num)
+    elif timestr[-1] == 'd':
+        return timedelta(days=num)
 
 
-class TwitterStreamStats:
+def _recorder(config):
+    if config['mode'] == 'csv':
+        pass
+    elif config['mode'] == 'json':
+        pass
+    elif config['mode'] == 'elasticsearch':
+        pass
+    else:
+         RuntimeError('unknown stats mode in config', config['mode'])
 
-    def __init__(self, repeats=False):
-        self.repeats = repeats
-        self.reset()
-        self.ids = {}
+
+class Statistics(object):
+
+    def __init__(self, config):
+        _recorder(config)
+        self.stats = dict(
+            count = 0,
+            coords = 0,
+            deletes = 0,
+            tweets = 0,
+            retweets = 0,
+            places = 0,
+            limits = 0,
+            )
+
 
     def reset(self):
-        self.count = 0
-        self.coords = 0
-        self.deletes = 0
-        self.tweets = 0
-        self.retweets = 0
-        self.places = 0
-        self.limits = 0
-
-    def counts(self):
-        return ', '.join((str(self.count), str(self.tweets),
-                 str(self.retweets), str(self.coords), str(self.places)))
-
-    def report(self):
-
-        if self.count == 0:
-            print('no tweets collected')
-            return
-
-        self.end = time.clock()
-
-        print('total stream count = ', self.count,
-              'in %f seconds' % (self.end - self.begin))
-        print('total tweets = ', self.tweets,
-              ' %.2f%% in stream' % (float(self.tweets)/self.count*100))
-        print('total retweets = ', self.retweets, 
-              ' %.2f%% of tweets' % (float(self.retweets)/self.tweets*100),
-              ' %.2f%% in stream ' % (float(self.retweets)/self.count*100))
-        print('total coords = ', self.coords, 
-              ' %.2f%% of tweets' % (float(self.coords)/self.tweets*100),
-              ' %.2f%% in stream ' % (float(self.coords)/self.count*100))
-        print('total places = ', self.places, 
-              ' %.2f%% of tweets' % (float(self.places)/self.tweets*100),
-              ' %.2f%% in stream ' % (float(self.places)/self.count*100))
-        if self.repeats:
-            print('total repeats = ', sum(self.repeats.values()) - self.tweets)
-        print('total deletes = ', self.deletes,
-              ' %.2f%% in stream' % (float(self.deletes)/self.count*100))
-        print('limits = ', self.limits,
-              ' %.2f%% in stream' % (float(self.limits)/self.count*100))
-        print('unknowns = ', 
-            self.count - self.tweets - self.limits - self.deletes)
+        for k in self.stats.keys():
+            self.stats[k] = 0
 
 
-    def classify(self, status):
+    def status_handler(self, status):
+        """Examines the status (tweet) and records statistics."""
 
-        # begin timer that ends when reporting
-        if self.count == 0:
-            self.begin = time.clock()
-
-        self.count += 1
+        self.stats['count'] += 1
         if 'text' in status:
-            print(json.dumps(status, indent=4, separators=(',', ': ')))
-            self.tweets += 1
+            self.stats['tweets'] += 1
 
             if 'retweeted_status' in status:
-                self.retweets += 1
+                self.stats['retweets'] += 1
 
             if status.get('coordinates', {}):
-                self.coords += 1
+                self.stats['coords'] += 1
 
             if status.get('place', {}):
-                self.places += 1
-
-            if self.repeats:
-                self.ids[status['id_str']] = \
-                    self.ids.setdefault(status['id_str'], 0) + 1
+                self.stats['places'] += 1
 
         elif 'delete' in status:
-            self.deletes += 1 
+            self.stats['deletes'] += 1 
 
         elif 'limits' in status:
-            self.limits += 1 
+            self.stats['limits'] += 1 
 
         else:
-            logger.warn('unknown status %s', status)
+            logging.warn('unknown status %s', status)
 
         return True
+
+
+    def dumps(self, **extras):
+        extras.update(self.stats)
+        json.dumps(extras)
 

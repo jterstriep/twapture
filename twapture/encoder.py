@@ -6,12 +6,13 @@ import objectpath as op
 import logging
 logger = logging.getLogger(__name__)
 
+
 class RawEncoder(object):
 
     def __init__(self, recorder, fields):
         self.recorder = recorder
 
-    def encode(self, status):
+    def status_handler(self, status):
         """Encodes the status to JSON string and records it."""
 
         self.recorder(json.dumps(status))
@@ -32,7 +33,7 @@ class FlatEncoder(object):
 
         return tuplelist
 
-    def encode(self, status):
+    def status_handler(self, status):
         """Encodes the desired fields into flat JSON dict and records it."""
 
         if 'text' not in status:
@@ -74,7 +75,7 @@ class CSVEncoder(object):
         return [ f.split('=', 1)[1].strip() for f in fields ]
 
 
-    def encode(self, status):
+    def status_handler(self, status):
         """Encodes the desired fields into CSV and records it."""
     
         # skip deletes and limits
@@ -104,4 +105,22 @@ class CSVEncoder(object):
         self.line.seek(0)
 
         return True
+
+
+def Encoder(recorder, config):
+    """return an Encoder class based on configuration."""
+
+    _format = config.get('format', 'raw')
+    if _format == 'raw':
+        return RawEncoder(recorder, config['fields'])
+    elif _format == 'flat':
+        return FlatEncoder(recorder, config['fields'])
+    elif _format == 'csv':
+        delimiter = config.get('delimiter', ',')
+        quoting = config.get('quoting', 'minimal')
+        return CSVEncoder(recorder, config['fields'],
+                delimiter=delimiter, quoting=quoting)
+    else:
+        raise RuntimeError('unknown recorder format = %s' % _format)
+
 

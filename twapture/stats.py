@@ -3,9 +3,11 @@
 docs
 """
 import os
+import sys
 from datetime import timedelta
 import time
 import json
+import logging
 
 
 def calc_interval(timestr):
@@ -24,21 +26,11 @@ def calc_interval(timestr):
         return timedelta(days=num)
 
 
-def _recorder(config):
-    if config['mode'] == 'csv':
-        pass
-    elif config['mode'] == 'json':
-        pass
-    elif config['mode'] == 'elasticsearch':
-        pass
-    else:
-         RuntimeError('unknown stats mode in config', config['mode'])
-
-
 class Statistics(object):
 
-    def __init__(self, config):
-        _recorder(config)
+    def __init__(self, config=None):
+        if config:
+            self.recorder(config)
         self.stats = dict(
             count = 0,
             coords = 0,
@@ -46,9 +38,20 @@ class Statistics(object):
             tweets = 0,
             retweets = 0,
             places = 0,
-            limits = 0,
+            limit = 0,
+            track = 0,
             )
 
+
+    def recorder(config):
+        if config['mode'] == 'csv':
+            pass
+        elif config['mode'] == 'json':
+            pass
+        elif config['mode'] == 'elasticsearch':
+            pass
+        else:
+             RuntimeError('unknown stats mode in config', config['mode'])
 
     def reset(self):
         for k in self.stats.keys():
@@ -74,8 +77,9 @@ class Statistics(object):
         elif 'delete' in status:
             self.stats['deletes'] += 1 
 
-        elif 'limits' in status:
-            self.stats['limits'] += 1 
+        elif 'limit' in status:
+            self.stats['limit'] += 1 
+            self.stats['track'] += status['limit']['track']
 
         else:
             logging.warn('unknown status %s', status)
@@ -87,3 +91,13 @@ class Statistics(object):
         extras.update(self.stats)
         json.dumps(extras)
 
+    def report(self):
+        print
+        print "status messages =", self.stats['count']
+        print "total tweets =", self.stats['tweets']
+        print "retweets =", self.stats['retweets'],
+        print "(%f)" % (float(self.stats['retweets']) / self.stats['tweets'])
+        print "coordinatess =", self.stats['coords'],
+        print "(%f)" % (float(self.stats['coords']) / self.stats['tweets'])
+        print "limit hit", self.stats['limit'],
+        print "missing", self.stats['track']

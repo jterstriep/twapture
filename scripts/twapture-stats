@@ -6,13 +6,15 @@ from __future__ import absolute_import, print_function
 import os
 import time
 import json
+import logging
+logging.basicConfig()
 
 from requests.packages import urllib3
 urllib3.disable_warnings()
 
 from tweepy import OAuthHandler
 from tweepy import Stream
-from twapture import MultiplexListener, TwitterStreamStats
+from twapture import SerializedListener, Statistics
 
 # Go to http://apps.twitter.com and create an app.
 # The consumer key and secret will be generated for you after
@@ -28,8 +30,8 @@ access_token_secret=os.environ['TWITTER_ACCESS_TOKEN_SECRET']
 def main():
 
     # add the stat classifier to the callback list
-    stats = TwitterStreamStats()
-    listener = MultiplexListener(stats.classify)
+    stats = Statistics()
+    listener = SerializedListener(stats.status_handler)
 
     auth = OAuthHandler(consumer_key, consumer_secret)
     auth.set_access_token(access_token, access_token_secret)

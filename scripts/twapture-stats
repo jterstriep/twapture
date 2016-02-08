@@ -6,8 +6,9 @@ from __future__ import absolute_import, print_function
 import os
 import time
 import json
+
 import logging
-logging.basicConfig()
+logger = logging.basicConfig(level=logging.INFO)
 
 from requests.packages import urllib3
 urllib3.disable_warnings()
@@ -30,7 +31,7 @@ access_token_secret=os.environ['TWITTER_ACCESS_TOKEN_SECRET']
 def main():
 
     # add the stat classifier to the callback list
-    stats = Statistics()
+    stats = Statistics(filename='stdout', format='raw', interval='20s')
     listener = SerializedListener(stats.status_handler)
 
     auth = OAuthHandler(consumer_key, consumer_secret)
@@ -38,9 +39,17 @@ def main():
     stream = Stream(auth, listener)
 
     try:
-        stream.filter(locations=[-125.0,24.0, -66.0,50.0])
+        #stream.filter(locations=[-90.0,24.0, -86.0,50.0])
+        #stream.filter(locations="-90.0,24.0, -86.0,50.0")
+        stream.filter(track="Chicago")
+        #stream.filter(track="Chicago, Dallas")
+        #stream.filter(track=["Chicago", "Dallas"])
+
     except KeyboardInterrupt: 
         stats.report() 
+
+    except Exception as e:
+        logger.exception('filter exception %s', e)
 
 
 if __name__ == '__main__':

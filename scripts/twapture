@@ -36,7 +36,7 @@ urllib3.disable_warnings()
 from tweepy import OAuthHandler
 from tweepy import Stream
 
-from twapture import SerializedListener, Encoder, Recorder
+from twapture import SerializedListener, Recorder, Encoder, Statistics
 
 
 
@@ -109,6 +109,10 @@ def create_parser():
     parser.add_argument('--log-filename',
             help='location for log file (default=stderr)')
 
+    parser.add_argument('-d', '--debug',
+            default=logging.INFO, const=logging.DEBUG, action='store_const',
+            help='set logging level to debug')
+
     return parser
 
 
@@ -128,32 +132,23 @@ def main():
         merge_args(config, args)
 
     # setup the process logger
-    config_logger(logger, config['logging']['filename'])
+    config_logger(logger, config['logging']['filename'], level=args.debug)
 
-    # create the tweet recorder, set the handlers
-    fname = config['recorder']['filename']
-    rotation = config['recorder']['rotating']
-    bufsize = config['recorder']['buffer-size']
-
-    recorder = logging.getLogger(u'tweet_recorder')
-    if fname == 'stdout':
-        config_stdout_recorder(recorder)
-    elif rotation == 'none':
-        config_watched_recorder(recorder, fname, bufsize=bufsize)
-    else:
-        config_timed_recorder(recorder, fname, rotation, bufsize=bufsize)
 
     listener = SerializedListener()
 
-    # configure statistic processing
-    if config['stats']['enable']:
-        stats = Statistics(config['stats'])
-        listener.append(stats.status_handler)
-
     # setup the recorder and add it to the stream listener
-    encoder = Encoder(config['encoder'])
-    recorder = Recorder(config['recorder'], encoder.status_handler)
+    encoder = Encoder(**config['recorder'])
+    recorder = Recorder(u'tweet_recorder', encoder=encoder.status_encoder,
+            **config['recorder'])
     listener.append(recorder.status_handler)
+
+    # configure statistic processing and add it to the steam listener
+    if 'stats' in config:
+        encoder = Statistics(**config['stats'])
+        stats = Recorder(u'tweet_stats', encoder=encoder.status_encoder,
+            **config['stats'])
+        listener.append(stats.status_handler)
 
     # begin streaming
     auth = OAuthHandler(config['twitter']['consumer-key'],
@@ -162,12 +157,12 @@ def main():
             config['twitter']['access-token-secret'])
     stream = Stream(auth, listener)
 
-    track = config['twitter']['track']
-    locations = config['twitter']['locations']
+    track = config['twitter'].get('track', '')
+    locations = config['twitter'].get('locations', '')
     try:
         if track or locations:
             logger.info('starting stream filter: track=%s location=%s', 
-                    track, str(locations))
+                    str(track), str(locations))
             stream.filter(track=track, locations=locations)
 
         else: 

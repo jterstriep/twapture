@@ -53,7 +53,7 @@ class SerializedListener(StreamListener):
         return self.functions[key]
 
     def __setitem__(self, key, value):
-        self.functions[key] = value
+        return self.functions[key] = value
 
     def __delitem__(self, key):
         del self.functions[key]
@@ -64,40 +64,28 @@ class SerializedListener(StreamListener):
     def append(self, value):
         self.functions.append(value)
 
-    def on_data(self, raw_data):
-        status = json.loads(raw_data)
+    def on_data(self, data):
+        status = json.loads(data)
 
         # stop processing functions when False is returned
         for func in self.functions:
             if not func(status):
-                logger.debug('pipeline ended')
                 break
 
         return True
 
     def on_error(self, status):
         if status == 420:
-            logger.warn('twitter stream is being limited')
-
-        elif status == 401:
-            logger.error('could not authentic, check credentials: code=401')
+            logger.warn('SerializedListener: twitter stream is being limited')
+            return True
 
         # twitter server errors
         elif status >= 500:
-            logger.error('twitter server error: code=%d', status)
+            logger.error('SerializedListener: twitter server error: code=%d',
+                         status)
+            return True
 
         else:
-            logger.error('stream returned error: code=%d', status)
-
-
-    def on_limit(self, track):
-        logger.warn('limit reach: %s', str(track))
-
-    def on_disconnect(self, notice):
-        logger.error('disconnect: %s', str(notice))
-
-    def on_warning(self, notice):
-        logger.warning('warning: %s', str(notice))
-
-    def on_exception(self, exception):
-        logger.exception('streaming exceptions: %s', str(exception))
+            logger.error('SerializedListener: stream returned error: code=%d',
+                         status)
+            return True

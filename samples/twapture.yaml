@@ -7,24 +7,26 @@ twitter:
     consumer-secret: 
     access-token: 
     access-token-secret: 
+    track: []                    # track keywords and topics
+    locations: []                # bounding box
 
 # Tweet recording options -- these values control where and how tweets
 # will be written. The tweet recorder is built using a WatchedFileHandler
 # (rotating=none) or a RotatingFileHandler.
 recorder:
-    track: []                    # track keywords and topics
-    locations: []                # bounding box
-    format: csv                  # raw (json) | csv | flat
-    delimiter: ","               # if int assume ascii character
-    filename: /tmp/twapture.csv  # path | stdout
+    recorder_name: tweets        # must be unique
+    filename: /tmp/twapture      # file path | stdout | stderr
     rotating: midnight           # none, midnight, 3h (every 3 hours), etc
-    quoting: minimal             # all, minimal, nonnumeric, none
     buffer-size: 100             # number of tweets collected before disk write
+    format: csv                  # raw (json) | flat (json using fields) | csv
+    delimiter: ","               # csv only: if int assume ascii character
+    quoting: minimal             # csv only: all, minimal, nonnumeric, none
 
     # format is '- fieldname = objectpath'
     # - fieldnames are ignored in the CSV format
     # - basic transformation in the objectpath are supported
     fields:
+        - id            = $.id_str
         - text          = $.text
         - username      = $.user.name
         - user_id       = $.user.id
@@ -32,11 +34,38 @@ recorder:
         - ycoord        = $.coordinates and $.coordinates.coordinates[0]
         - created_at    = $.created_at
 
-    # - reverse($.coordinates.coordinates) <<< COOL this works
-
     # filter tweets based on content
-    # Note: this doesn't impact the streaming rate
+    # options include:
+    #    no_retweets - does not record retweets
+    #    hashtag     - only records tweets with hash tags 
+    #    coordinates - only records tweets with coordinates
     filter: []
+
+
+# Report tweet collection statistics
+# interval: reporting rate 30m (every 30 minutes), 1d (once a day), etc
+#
+stats:
+    recorder_name: stats         # must be unique
+    interval: 10s                # statistic reporting interval (20s, 30m, etc)
+    filename: /tmp/twapture_stats
+    rotating: 30d
+    buffer-size: 0               # stats are written immediately
+    format: flat                 # raw (json) | flat (json using fields) | csv
+    delimiter: ","               # csv only: if int assume ascii character
+    quoting: minimal             # csv only: all, minimal, nonnumeric, none
+
+    # field format is '    - fieldname = objectpath'
+    # * all fields are shown below
+    # * basic transformation in the objectpath are supported
+    # * field names are ignored in the raw and csv format
+    fields:
+        - timestamp     = $.timestamp
+        - duration      = $.duration
+        - count         = $.count
+        - tweets        = $.tweets
+        - coords        = $.coords
+        - retweets      = $.retweets
 
 
 # Logging options -- controls where the log will be generated and if
@@ -44,26 +73,6 @@ recorder:
 # if a path is given.
 #
 logging:
-    filename:    # path | stderr
+    filename: stderr   # file path | stderr
 
-
-# Report tweet collection statistics
-# enable: true | false
-# interval: reporting rate 30m (every 30 minutes), 1d (once a day), etc
-# mode: csv | elasticsearch
-#
-stats:
-    enable: true
-    interval: 1h
-    mode: elasticsearch
-    csv:
-        path: twapture_stats.csv
-    json:
-        path: twapture_stats.json
-    elasticsearch:
-        host: 141.142.168.47
-        port: 80
-        prefix: es
-        auth: 
-        index: twapture-national
 

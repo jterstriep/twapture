@@ -5,7 +5,7 @@ def readme():
         return f.read()
 
 setup(name = 'twapture',
-    version = '1.0',
+    version = '1.1',
     description = 'Capture tweets using the twitter streaming API',
     url = 'http://github.com/jterstriep/twapture',
     author = 'Jeff Terstriep',

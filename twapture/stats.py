@@ -108,7 +108,7 @@ class Statistics(object):
 
         elif 'limit' in status:
             self.stats['limits'] += 1 
-            self.stats['track'] = status['limit']['track']
+            self.stats['track'] += status['limit']['track']
 
         else:
             logger.warn('unknown status %s', status)
@@ -121,7 +121,7 @@ class Statistics(object):
         json.dumps(extras)
 
     def report(self):
-        print "starting at", time.ctime(self.stats['start']), 
+        print "\n\nstarting at", time.ctime(self.stats['start']), 
         print "(%10.0f secs)" % self.stats['start']
         print "duration = %10.0f secs" % (time.time() - self.stats['start'])
         print "status messages =", self.stats['count']
@@ -130,5 +130,5 @@ class Statistics(object):
                 float(self.stats['retweets']) / self.stats['tweets'])
         print "coordinates = {0} ({1:.0%})".format(self.stats['coords'],
                 float(self.stats['coords']) / self.stats['tweets'])
-        print "limit hit {} times, track = {}".format(self.stats['limits'],
-                self.stats['track'])
+        print "limit hit {} times, track (missed) = {}".format(
+                self.stats['limits'], self.stats['track'])

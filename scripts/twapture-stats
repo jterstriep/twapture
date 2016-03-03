@@ -4,11 +4,12 @@ docs
 """
 from __future__ import absolute_import, print_function
 import os
+import sys
 import time
 import json
 
 import logging
-logger = logging.basicConfig(level=logging.INFO)
+logger = logging.basicConfig(level=logging.WARN)
 
 from requests.packages import urllib3
 urllib3.disable_warnings()
@@ -29,6 +30,10 @@ access_token_secret=os.environ['TWITTER_ACCESS_TOKEN_SECRET']
 
 
 def main():
+
+    # Give the user indication of what's happening
+    sys.stderr.write('Starting statistic collection at %s.\n' % time.ctime())
+    sys.stderr.write('Use Ctrl-C to write report.\n\n')
 
     # add the stat classifier to the callback list
     stats = Statistics(filename='stdout', format='raw', interval='20s')

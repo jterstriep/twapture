@@ -31,12 +31,13 @@ sudo python setup.py install
 
 ## To Do
 * Write documentation
-* Add stream statistics
-* Add package to Pypi
+* Add package to PyPI
 
 ## Resources
 
 https://dev.twitter.com/overview/api
+
 http://www.tweepy.org/
+
 http://objectpath.org/reference.html
 

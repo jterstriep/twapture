@@ -1,0 +1,8 @@
+PyYAML==3.12
+argparse==1.2.1
+elasticsearch==2.4.0
+objectpath==0.5
+pytz==2016.6.1
+tweepy==3.5.0
+unicodecsv==0.14.1
+wsgiref==0.1.2
